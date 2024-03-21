@@ -3,6 +3,8 @@ from __init__ import CURSOR, CONN
 
 class Department:
 
+    all = {}
+
     def __init__(self, name, location, id=None):
         self.id = id
         self.name = name
@@ -18,7 +20,7 @@ class Department:
             CREATE TABLE IF NOT EXISTS departments (
             id INTEGER PRIMARY KEY,
             name TEXT,
-            location TEXT)
+            location TEXT);
         """
         CURSOR.execute(sql)
         CONN.commit()
@@ -38,13 +40,14 @@ class Department:
         """
         sql = """
             INSERT INTO departments (name, location)
-            VALUES (?, ?)
+            VALUES (?, ?);
         """
 
         CURSOR.execute(sql, (self.name, self.location))
         CONN.commit()
 
         self.id = CURSOR.lastrowid
+        type(self).all[self.id] = self
 
     @classmethod
     def create(cls, name, location):
@@ -58,7 +61,7 @@ class Department:
         sql = """
             UPDATE departments
             SET name = ?, location = ?
-            WHERE id = ?
+            WHERE id = ?;
         """
         CURSOR.execute(sql, (self.name, self.location, self.id))
         CONN.commit()
@@ -67,8 +70,66 @@ class Department:
         """Delete the table row corresponding to the current Department instance"""
         sql = """
             DELETE FROM departments
-            WHERE id = ?
+            WHERE id = ?;
         """
 
         CURSOR.execute(sql, (self.id,))
         CONN.commit()
+
+        del type(self).all[self.id]
+
+        self.id = None
+
+    @classmethod
+    def instance_from_db(cls, row):
+        """Return a Department object having the 
+        attribute values from the table row"""
+
+        #Check the dictionary for an existing instance using the row's primary key
+        department = cls.all.get(row[0])
+        if department:
+            #ensure attributes match row values in case local object was modified
+            department.name = row[1]
+            department.location = row[2]
+        else:
+            #not n dictionary, create new instance and add to dictionary
+            department = cls(row[1], row[2])
+            department.id = row[0]
+            cls.all[department.id] = department
+        return department
+    
+    @classmethod
+    def get_all(cls):
+        """Return a list containing a Department object per row in the table"""
+        sql = """
+            SELECT *
+            FROM departments;
+        """
+
+        rows = CURSOR.execute(sql).fetchall()
+        return [cls.instance_from_db(row) for row in rows]
+    
+    @classmethod
+    def find_by_id(cls, id):
+        """Return a Department object corresponding to the
+        table row matching the specified primary key"""
+        sql = """
+            SELECT *
+            FROM departments
+            where id = ?
+        """
+
+        row = CURSOR.execute(sql, (id,)).fetchone()
+        return cls.instance_from_db(row) if row else None
+
+    @classmethod
+    def find_by_name(cls, name):
+        """Return a Department object corresponding to first table row mathcing specified name"""
+        sql = """
+            SELECT *
+            FROM departments
+            WHERE name is ?
+        """
+
+        row = CURSOR.execute(sql, (name,)).fetchone()
+        return cls.instance_from_db(row) if row else None
